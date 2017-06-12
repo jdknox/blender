@@ -4234,6 +4234,179 @@ static void UV_OT_mark_seam(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "clear", false, "Clear Seams", "Clear instead of marking seams");
 }
 
+/* ************************** uv select similar operator ********************/
+/* ****************  SIMILAR "group" SELECTS. UV FACE, EDGE AND VERTEX ******* */
+static EnumPropertyItem prop_similar_compare_types[] = {
+	{SIM_CMP_EQ, "EQUAL", 0, "Equal", ""},
+	{SIM_CMP_GT, "GREATER", 0, "Greater", ""},
+	{SIM_CMP_LT, "LESS", 0, "Less", ""},
+
+	{0, NULL, 0, NULL, NULL}
+};
+
+static EnumPropertyItem prop_similar_types[] = {
+//	{SIMVERT_NORMAL, "NORMAL", 0, "Normal", ""},
+//	{SIMVERT_FACE, "FACE", 0, "Amount of Adjacent Faces", ""},
+//	{SIMVERT_VGROUP, "VGROUP", 0, "Vertex Groups", ""},
+//	{SIMVERT_EDGE, "EDGE", 0, "Amount of connecting edges", ""},
+
+//	{SIMEDGE_LENGTH, "LENGTH", 0, "Length", ""},
+//	{SIMEDGE_DIR, "DIR", 0, "Direction", ""},
+//	{SIMEDGE_FACE, "FACE", 0, "Amount of Faces Around an Edge", ""},
+//	{SIMEDGE_FACE_ANGLE, "FACE_ANGLE", 0, "Face Angles", ""},
+
+//	{SIMFACE_MATERIAL, "MATERIAL", 0, "Material", ""},
+//	{SIMFACE_IMAGE, "IMAGE", 0, "Image", ""},
+	{SIMFACE_AREA, "AREA", 0, "Area", ""},
+//	{SIMFACE_SIDES, "SIDES", 0, "Polygon Sides", ""},
+//	{SIMFACE_PERIMETER, "PERIMETER", 0, "Perimeter", ""},
+//	{SIMFACE_NORMAL, "NORMAL", 0, "Normal", ""},
+//	{SIMFACE_SMOOTH, "SMOOTH", 0, "Flat/Smooth", ""},
+
+	{0, NULL, 0, NULL, NULL}
+};
+
+/* selects new UV verts based on the existing selection */
+
+static int uv_similar_vert_select_exec(bContext *C, wmOperator *op)
+{
+	// stub
+	return OPERATOR_FINISHED;
+}
+
+/* selects new UV edges based on the existing selection */
+
+static int uv_similar_edge_select_exec(bContext *C, wmOperator *op)
+{
+	// stub
+	return OPERATOR_FINISHED;
+}
+
+/* selects new UV faces based on the existing selection */
+
+static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
+{
+//	Object *ob = CTX_data_edit_object(C);
+//	BMEditMesh *em = BKE_editmesh_from_object(ob);
+//	BMOperator bmop;
+
+//	/* get the type from RNA */
+//	const int type = RNA_enum_get(op->ptr, "type");
+//	const float thresh = RNA_float_get(op->ptr, "threshold");
+//	const int compare = RNA_enum_get(op->ptr, "compare");
+
+//	/* initialize the bmop using EDBM api, which does various ui error reporting and other stuff */
+//	EDBM_op_init(em, &bmop, op,
+//	             "similar_faces faces=%hf type=%i thresh=%f compare=%i",
+//	             BM_ELEM_SELECT, type, thresh, compare);
+
+//	/* execute the operator */
+//	BMO_op_exec(em->bm, &bmop);
+
+//	/* clear the existing selection */
+//	EDBM_flag_disable_all(em, BM_ELEM_SELECT);
+
+//	/* select the output */
+//	BMO_slot_buffer_hflag_enable(em->bm, bmop.slots_out, "faces.out", BM_FACE, BM_ELEM_SELECT, true);
+
+//	/* finish the operator */
+//	if (!EDBM_op_finish(em, &bmop, op, true)) {
+//		return OPERATOR_CANCELLED;
+//	}
+
+//	EDBM_update_generic(em, false, false);
+
+	return OPERATOR_FINISHED;
+}
+
+/* select new UV faces/edges/verts based on current selection */
+static int uv_select_similar_exec(bContext *C, wmOperator *op)
+{
+	ToolSettings *ts = CTX_data_tool_settings(C);
+	PropertyRNA *prop = RNA_struct_find_property(op->ptr, "threshold");
+
+	const int type = RNA_enum_get(op->ptr, "type");
+
+	if (!RNA_property_is_set(op->ptr, prop)) {
+		RNA_property_float_set(op->ptr, prop, ts->select_thresh);
+	}
+	else {
+		ts->select_thresh = RNA_property_float_get(op->ptr, prop);
+	}
+
+	if      (type < 100) return uv_similar_vert_select_exec(C, op);
+	else if (type < 200) return uv_similar_edge_select_exec(C, op);
+	else	return uv_similar_face_select_exec(C, op);
+}
+
+static EnumPropertyItem *uv_select_similar_type_itemf(bContext *C, PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop),
+                                                   bool *r_free)
+{
+	Object *obedit;
+
+	if (!C) /* needed for docs and i18n tools */
+		return prop_similar_types;
+
+	obedit = CTX_data_edit_object(C);
+	// if (ts->uv_selectmode == UV_SELECT_FACE)
+
+	if (obedit && obedit->type == OB_MESH) {
+		EnumPropertyItem *item = NULL;
+		int a, totitem = 0;
+		BMEditMesh *em = BKE_editmesh_from_object(obedit);
+
+		/*if (em->selectmode & SCE_SELECT_VERTEX) {
+			for (a = SIMVERT_NORMAL; a < SIMEDGE_LENGTH; a++) {
+				RNA_enum_items_add_value(&item, &totitem, prop_similar_types, a);
+			}
+		}
+		else if (em->selectmode & SCE_SELECT_EDGE) {
+			for (a = SIMEDGE_LENGTH; a < SIMFACE_MATERIAL; a++) {
+				RNA_enum_items_add_value(&item, &totitem, prop_similar_types, a);
+			}
+		}
+		else if (em->selectmode & SCE_SELECT_FACE)*/ {
+			const int a_end = SIMFACE_SMOOTH;
+			for (a = SIMFACE_MATERIAL; a <= a_end; a++) {
+				RNA_enum_items_add_value(&item, &totitem, prop_similar_types, a);
+			}
+		}
+		RNA_enum_item_end(&item, &totitem);
+
+		*r_free = true;
+
+		return item;
+	}
+
+	return prop_similar_types;
+}
+
+void UV_OT_select_similar(wmOperatorType *ot)
+{
+	PropertyRNA *prop;
+
+	/* identifiers */
+	ot->name = "Select Similar";
+	ot->description = "Select similar UV vertices, edges or faces by property types";
+	ot->idname = "UV_OT_select_similar";
+
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+	/* api callbacks */
+	ot->exec = uv_select_similar_exec;
+	ot->invoke = WM_menu_invoke;
+	ot->poll = ED_operator_uvedit;
+
+	/* properties */
+	prop = ot->prop = RNA_def_enum(ot->srna, "type", prop_similar_types, SIMVERT_NORMAL, "Type", "");
+	RNA_def_enum_funcs(prop, uv_select_similar_type_itemf);
+
+	RNA_def_enum(ot->srna, "compare", prop_similar_compare_types, SIM_CMP_EQ, "Compare", "");
+
+	RNA_def_float(ot->srna, "threshold", 0.0f, 0.0f, 1.0f, "Threshold", "", 0.0f, 1.0f);
+}
+
 
 /* ************************** registration **********************************/
 
@@ -4251,6 +4424,7 @@ void ED_operatortypes_uvedit(void)
 	WM_operatortype_append(UV_OT_circle_select);
 	WM_operatortype_append(UV_OT_select_more);
 	WM_operatortype_append(UV_OT_select_less);
+	WM_operatortype_append(UV_OT_select_similar);
 
 	WM_operatortype_append(UV_OT_snap_cursor);
 	WM_operatortype_append(UV_OT_snap_selected);
