@@ -640,6 +640,25 @@ void uv_poly_copy_aspect(float uv_orig[][2], float uv[][2], float aspx, float as
 	}
 }
 
+/* get the area of the UV */
+float uv_poly_calc_area(const BMFace *f, const int cd_loop_uv_offset)
+{
+	const BMLoop *l_iter, *l_first;
+	MLoopUV *luv1, *luv2;
+	float n;
+
+	/* calculate area using 2D cross product (shortcut of Newell's Method) */
+	n = 0;
+	l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+	do {
+		luv1 = BM_ELEM_CD_GET_VOID_P(l_iter, cd_loop_uv_offset);
+		luv2 = BM_ELEM_CD_GET_VOID_P(l_iter->next, cd_loop_uv_offset);
+		n += cross_v2v2(luv1->uv, luv2->uv);
+	} while ((l_iter = l_iter->next) != l_first);
+
+	return n * 0.5f;
+}
+
 bool ED_uvedit_minmax(Scene *scene, Image *ima, Object *obedit, float r_min[2], float r_max[2])
 {
 	BMEditMesh *em = BKE_editmesh_from_object(obedit);
@@ -4244,6 +4263,7 @@ static EnumPropertyItem prop_similar_compare_types[] = {
 	{0, NULL, 0, NULL, NULL}
 };
 
+/* for selecting simular UVs - This list might need be modified to make sense for UVs. */
 static EnumPropertyItem prop_similar_types[] = {
 //	{SIMVERT_NORMAL, "NORMAL", 0, "Normal", ""},
 //	{SIMVERT_FACE, "FACE", 0, "Amount of Adjacent Faces", ""},
@@ -4257,7 +4277,7 @@ static EnumPropertyItem prop_similar_types[] = {
 
 //	{SIMFACE_MATERIAL, "MATERIAL", 0, "Material", ""},
 //	{SIMFACE_IMAGE, "IMAGE", 0, "Image", ""},
-	{SIMFACE_AREA, "AREA", 0, "Area", ""},
+	{SIMFACE_AREA, "AREA", 0, "Area", "Select UV faces with similar area"},
 //	{SIMFACE_SIDES, "SIDES", 0, "Polygon Sides", ""},
 //	{SIMFACE_PERIMETER, "PERIMETER", 0, "Perimeter", ""},
 //	{SIMFACE_NORMAL, "NORMAL", 0, "Normal", ""},
@@ -4266,8 +4286,23 @@ static EnumPropertyItem prop_similar_types[] = {
 	{0, NULL, 0, NULL, NULL}
 };
 
-/* selects new UV verts based on the existing selection */
+/* copied from bmo_similar.c - need a better solution... */
+static int uv_select_similar_cmp_fl(const float delta, const float thresh, const int compare)
+{
+	switch (compare) {
+		case SIM_CMP_EQ:
+			return (fabsf(delta) <= thresh);
+		case SIM_CMP_GT:
+			return ((delta + thresh) >= 0.0f);
+		case SIM_CMP_LT:
+			return ((delta - thresh) <= 0.0f);
+		default:
+			BLI_assert(0);
+			return 0;
+	}
+}
 
+/* selects new UV verts based on the existing selection */
 static int uv_similar_vert_select_exec(bContext *C, wmOperator *op)
 {
 	// stub
@@ -4275,7 +4310,6 @@ static int uv_similar_vert_select_exec(bContext *C, wmOperator *op)
 }
 
 /* selects new UV edges based on the existing selection */
-
 static int uv_similar_edge_select_exec(bContext *C, wmOperator *op)
 {
 	// stub
@@ -4283,38 +4317,105 @@ static int uv_similar_edge_select_exec(bContext *C, wmOperator *op)
 }
 
 /* selects new UV faces based on the existing selection */
-
 static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 {
-//	Object *ob = CTX_data_edit_object(C);
-//	BMEditMesh *em = BKE_editmesh_from_object(ob);
-//	BMOperator bmop;
+	Object *obedit = CTX_data_edit_object(C);
+	Scene *scene = CTX_data_scene(C);
+	Image *ima = CTX_data_edit_image(C);
 
-//	/* get the type from RNA */
-//	const int type = RNA_enum_get(op->ptr, "type");
-//	const float thresh = RNA_float_get(op->ptr, "threshold");
-//	const int compare = RNA_enum_get(op->ptr, "compare");
+	Mesh *me = (Mesh *)obedit->data;
+	BMEditMesh *em = me->edit_btmesh;
+	BMesh *bm = em->bm;
 
-//	/* initialize the bmop using EDBM api, which does various ui error reporting and other stuff */
-//	EDBM_op_init(em, &bmop, op,
-//	             "similar_faces faces=%hf type=%i thresh=%f compare=%i",
-//	             BM_ELEM_SELECT, type, thresh, compare);
+	BMFace *efa, *f_selected, *f_mark;
+	BMIter iter;
+	MTexPoly *tf;
 
-//	/* execute the operator */
-//	BMO_op_exec(em->bm, &bmop);
+	SimSel_UVFaceExt *uv_face_extra = NULL;
+	int *selected_indices = NULL;
+	int selected_uvface_count = 0;
+	int visible_uvface_count = 0;
 
-//	/* clear the existing selection */
-//	EDBM_flag_disable_all(em, BM_ELEM_SELECT);
+	int i, j;
+	int sel;		/* current selected index */
+	float delta_fl;	/* initial_elem - other_elem */
+	int   delta_i;
 
-//	/* select the output */
-//	BMO_slot_buffer_hflag_enable(em->bm, bmop.slots_out, "faces.out", BM_FACE, BM_ELEM_SELECT, true);
+	/* get the type from RNA */
+	const int type = RNA_enum_get(op->ptr, "type");
+	const float threshold = RNA_float_get(op->ptr, "threshold");
+	const int compare = RNA_enum_get(op->ptr, "compare");
 
-//	/* finish the operator */
-//	if (!EDBM_op_finish(em, &bmop, op, true)) {
-//		return OPERATOR_CANCELLED;
-//	}
+	const int cd_loop_uv_offset = CustomData_get_offset(&bm->ldata, CD_MLOOPUV);
+	const int cd_poly_tex_offset = CustomData_get_offset(&bm->pdata, CD_MTEXPOLY);
+	const int total_face_count = BM_mesh_elem_count(bm, BM_FACE);
 
-//	EDBM_update_generic(em, false, false);
+	uv_face_extra = MEM_callocN(sizeof(*uv_face_extra) * total_face_count,
+	                                                "uv_face_extra uvedit_ops.c");
+
+	/* store face data for comparison later */
+	i = 0;
+	BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
+		tf = BM_ELEM_CD_GET_VOID_P(efa, cd_poly_tex_offset);
+		if (!uvedit_face_visible_test(scene, ima, efa, tf))
+			continue;	// skip invisible UVs
+
+		uv_face_extra[i].f = efa;
+
+		if (type == SIMFACE_PERIMETER || type == SIMFACE_AREA || type == SIMFACE_COPLANAR || type == SIMFACE_IMAGE) {
+			switch (type) {
+				case SIMFACE_AREA:
+					uv_face_extra[i].area = uv_poly_calc_area(efa, cd_loop_uv_offset);
+					break;
+			}
+		}
+		if (uvedit_face_select_test(scene, efa, cd_loop_uv_offset)) {
+			selected_uvface_count++;
+			uv_face_extra[i].selected = true;
+		}
+		visible_uvface_count++;
+		i++;
+	}
+
+	/* store selected indices */
+	selected_indices = MEM_callocN(sizeof(*selected_indices) * selected_uvface_count,
+	                             "selected_indices uvedit_ops.c");
+	j = 0;
+	for (i = 0; i < visible_uvface_count; i++) {
+		if (uv_face_extra[i].selected)
+			selected_indices[j] = i;
+	}
+
+	/* now go through and select any similar UV faces */
+	for (i = 0; i < visible_uvface_count; i++) {
+		if (uv_face_extra[i].selected)
+			continue;
+
+		f_mark = uv_face_extra[i].f;
+		for (j = 0; j < selected_uvface_count; j++) {
+			sel = selected_indices[j];
+			f_selected = uv_face_extra[sel].f; /* will be used in future expansions */
+			switch (type) {
+				case SIMFACE_AREA:
+					delta_fl = uv_face_extra[i].area - uv_face_extra[sel].area;
+					if (uv_select_similar_cmp_fl(delta_fl, threshold, compare)) {
+						uvedit_face_select_enable(scene, em, f_mark, true, cd_loop_uv_offset);
+						goto continue_outer_loop; /* https://stackoverflow.com/a/9695942/3638059 */
+					}
+					break;
+
+				default:
+					BLI_assert(0);
+					break;
+			}
+		}
+		continue_outer_loop: ;
+	}
+
+	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+
+	MEM_freeN(uv_face_extra);
+	MEM_freeN(selected_indices);
 
 	return OPERATOR_FINISHED;
 }
@@ -4339,33 +4440,33 @@ static int uv_select_similar_exec(bContext *C, wmOperator *op)
 	else	return uv_similar_face_select_exec(C, op);
 }
 
+/* enumerate types of similar features for call menu */
 static EnumPropertyItem *uv_select_similar_type_itemf(bContext *C, PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop),
                                                    bool *r_free)
 {
 	Object *obedit;
+	ToolSettings *ts = CTX_data_tool_settings(C);
 
 	if (!C) /* needed for docs and i18n tools */
 		return prop_similar_types;
 
 	obedit = CTX_data_edit_object(C);
-	// if (ts->uv_selectmode == UV_SELECT_FACE)
 
 	if (obedit && obedit->type == OB_MESH) {
 		EnumPropertyItem *item = NULL;
 		int a, totitem = 0;
-		BMEditMesh *em = BKE_editmesh_from_object(obedit);
 
-		/*if (em->selectmode & SCE_SELECT_VERTEX) {
+		if (ts->uv_selectmode & SCE_SELECT_VERTEX) {
 			for (a = SIMVERT_NORMAL; a < SIMEDGE_LENGTH; a++) {
 				RNA_enum_items_add_value(&item, &totitem, prop_similar_types, a);
 			}
 		}
-		else if (em->selectmode & SCE_SELECT_EDGE) {
+		else if (ts->uv_selectmode & SCE_SELECT_EDGE) {
 			for (a = SIMEDGE_LENGTH; a < SIMFACE_MATERIAL; a++) {
 				RNA_enum_items_add_value(&item, &totitem, prop_similar_types, a);
 			}
 		}
-		else if (em->selectmode & SCE_SELECT_FACE)*/ {
+		else if (ts->uv_selectmode & SCE_SELECT_FACE) {
 			const int a_end = SIMFACE_SMOOTH;
 			for (a = SIMFACE_MATERIAL; a <= a_end; a++) {
 				RNA_enum_items_add_value(&item, &totitem, prop_similar_types, a);
