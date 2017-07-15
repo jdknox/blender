@@ -386,8 +386,6 @@ static void console_main_region_listener(bScreen *UNUSED(sc), ScrArea *sa, ARegi
 				}
 				else {
 					/* generic redraw request */
-					if (((PanelCategoryDyn*)ar->panels_category_active.first)->idname )
-						;
 					ED_region_tag_redraw(ar);
 				}
 			}

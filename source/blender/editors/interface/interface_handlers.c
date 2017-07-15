@@ -7884,7 +7884,7 @@ static void button_activate_init(bContext *C, ARegion *ar, uiBut *but, uiButtonA
 		data->used_mouse = true;
 	}
 	button_activate_state(C, but, BUTTON_STATE_HIGHLIGHT);
-
+	
 	/* activate right away */
 	if (but->flag & UI_BUT_IMMEDIATE) {
 		if (but->type == UI_BTYPE_HOTKEY_EVENT)
