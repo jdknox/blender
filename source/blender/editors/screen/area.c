@@ -70,6 +70,7 @@
 #include "UI_view2d.h"
 
 #include "screen_intern.h"
+#include "../interface/interface_intern.h"
 
 extern void ui_draw_anti_tria(float x1, float y1, float x2, float y2, float x3, float y3); /* xxx temp */
 
@@ -1757,6 +1758,24 @@ int ED_area_header_switchbutton(const bContext *C, uiBlock *block, int yco)
 
 /************************ standard UI regions ************************/
 
+bool color_has_icon(const ARegion *ar, int line)
+{
+	uiBlock *block;
+//	has_icon = "NA";
+	for (block = ar->uiblocks.first; block; block = block->next) {
+		for (uiBut *button = block->buttons.first; button; button = button->next) {
+			if (BLI_strcasecmp(button->str, "Color") == 0)
+			{
+				char *has_icon = button->flag & UI_HAS_ICON ? "UI_HAS_ICON" : "NO";
+				fprintf(stderr, "     %s, icon: %i | %s [line: %i]\n", button->str, button->icon, has_icon, line);
+				return true;
+			}
+		}
+	}
+//	fprintf(stderr, "__NO_COLOR_BUTTON [line: %i]\n", line);
+	return false;
+}
+
 void ED_region_panels(const bContext *C, ARegion *ar, const char *context, int contextnr, const bool vertical)
 {
 	ScrArea *sa = CTX_wm_area(C);
@@ -1776,6 +1795,7 @@ void ED_region_panels(const bContext *C, ARegion *ar, const char *context, int c
 	const char *category = NULL;
 	const int category_tabs_width = UI_PANEL_CATEGORY_MARGIN_WIDTH;
 	int margin_x = 0;
+	fprintf(stderr, "  begin ED_region_panels\n");
 
 	BLI_SMALLSTACK_DECLARE(pt_stack, PanelType *);
 
@@ -1839,8 +1859,6 @@ void ED_region_panels(const bContext *C, ARegion *ar, const char *context, int c
 			margin_x = category_tabs_width;
 		}
 	}
-
-
 	/* sortof hack - but we cannot predict the height of panels, until it's being generated */
 	/* the layout engine works with fixed width (from v2d->cur), which is being set at end of the loop */
 	/* in case scroller settings (hide flags) differ from previous, the whole loop gets done again */
@@ -1863,11 +1881,16 @@ void ED_region_panels(const bContext *C, ARegion *ar, const char *context, int c
 		/* set view2d view matrix  - UI_block_begin() stores it */
 		UI_view2d_view_ortho(v2d);
 
+		fprintf(stderr, "   begin iter\n");
+		color_has_icon(ar, __LINE__);//		panelname: "PHYSICS_PT_dp_effects"
 		BLI_SMALLSTACK_ITER_BEGIN(pt_stack, pt)
 		{
 			bool open;
 
+//			fprintf(stderr, "    before panel_find:\n");
+//			color_has_icon(ar, __LINE__);
 			panel = UI_panel_find_by_type(ar, pt);
+//			color_has_icon(ar, __LINE__);
 
 			if (use_category_tabs && pt->category[0] && !STREQ(category, pt->category)) {
 				if ((panel == NULL) || ((panel->flag & PNL_PIN) == 0)) {
@@ -1878,6 +1901,8 @@ void ED_region_panels(const bContext *C, ARegion *ar, const char *context, int c
 			/* draw panel */
 			block = UI_block_begin(C, ar, pt->idname, UI_EMBOSS);
 			panel = UI_panel_begin(sa, ar, block, pt, panel, &open);
+			fprintf(stderr, "\n    panel_begin: %s\n", panel->panelname);
+			color_has_icon(ar, __LINE__);
 
 			/* bad fixed values */
 			triangle = (int)(UI_UNIT_Y * 1.1f);
@@ -1924,9 +1949,13 @@ void ED_region_panels(const bContext *C, ARegion *ar, const char *context, int c
 				UI_panel_end(block, w, 0);
 			}
 
+			color_has_icon(ar, __LINE__);
 			UI_block_end(C, block);
+			color_has_icon(ar, __LINE__);
 		}
 		BLI_SMALLSTACK_ITER_END;
+		fprintf(stderr, "   end iter\n");
+		color_has_icon(ar, __LINE__);
 
 		/* align panels and return size */
 		UI_panels_end(C, ar, &x, &y);
@@ -1984,6 +2013,7 @@ void ED_region_panels(const bContext *C, ARegion *ar, const char *context, int c
 	UI_view2d_view_ortho(v2d);
 
 	/* draw panels */
+	fprintf(stderr, "  end ED_region_panels\n");
 	UI_panels_draw(C, ar);
 
 	/* restore view matrix */

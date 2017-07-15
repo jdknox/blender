@@ -1519,6 +1519,11 @@ static void widget_draw_text_icon(uiFontStyle *fstyle, uiWidgetColors *wcol, uiB
 		widget_draw_icon(but, ICON_LAYER_USED, alpha, &temp, false);
 	}
 
+	if (BLI_strcasecmp(but->str, "Color") == 0)
+	{
+		char *has_icon = but->flag & UI_HAS_ICON ? "UI_HAS_ICON" : "NO_ICON";
+		fprintf(stderr, " widget_draw_text_icon: %s, icon: %i | %s\n", but->str, but->icon, has_icon);
+	}
 	/* If there's an icon too (made with uiDefIconTextBut) then draw the icon
 	 * and offset the text label to accommodate it */
 

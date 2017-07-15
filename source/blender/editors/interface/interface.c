@@ -684,7 +684,7 @@ static bool ui_but_update_from_old_block(const bContext *C, uiBlock *block, uiBu
 
 	if (oldbut->active) {
 		/* flags from the buttons we want to refresh, may want to add more here... */
-		const int flag_copy = UI_BUT_REDALERT;
+		const int flag_copy = UI_BUT_REDALERT | UI_HAS_ICON;
 
 		found_active = true;
 
@@ -1223,6 +1223,19 @@ void UI_block_update_from_old(const bContext *C, uiBlock *block)
 	block->oldblock = NULL;
 }
 
+bool color_has_icon_block(const uiBlock *block, int line)
+{
+	for (uiBut *button = block->buttons.first; button; button = button->next) {
+		if (BLI_strcasecmp(button->str, "Color") == 0)
+		{
+			char *has_icon = button->flag & UI_HAS_ICON ? "UI_HAS_ICON" : "NO";
+			fprintf(stderr, "      %s, icon: %i | %s [line: %i][%s]\n", button->str, button->icon, has_icon, line, __FILE__);
+			return true;
+		}
+	}
+	return false;
+}
+
 void UI_block_end_ex(const bContext *C, uiBlock *block, const int xy[2])
 {
 	wmWindow *window = CTX_wm_window(C);
@@ -1230,6 +1243,7 @@ void UI_block_end_ex(const bContext *C, uiBlock *block, const int xy[2])
 	uiBut *but;
 
 	BLI_assert(block->active);
+	color_has_icon_block(block, __LINE__);
 
 	UI_block_update_from_old(C, block);
 
@@ -3495,6 +3509,11 @@ static uiBut *ui_def_but_rna(
 
 	if (icon) {
 		ui_def_but_icon(but, icon, UI_HAS_ICON);
+		if (BLI_strcasecmp(but->str, "Color") == 0)
+		{
+			char *has_icon = but->flag & UI_HAS_ICON ? "UI_HAS_ICON" : "NO_ICON";
+			fprintf(stderr, "ui_def_button_rna: %s, icon: %i | %s\n", but->str, but->icon, has_icon);
+		}
 	}
 	
 	if ((type == UI_BTYPE_MENU) && (but->dt == UI_EMBOSS_PULLDOWN)) {
