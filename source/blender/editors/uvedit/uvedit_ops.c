@@ -644,15 +644,15 @@ void uv_poly_copy_aspect(float uv_orig[][2], float uv[][2], float aspx, float as
 float uv_poly_calc_area(const BMFace *f, const int cd_loop_uv_offset)
 {
 	const BMLoop *l_iter, *l_first;
-	MLoopUV *luv1, *luv2;
+	const MLoopUV *luv1, *luv2;
 	float n;
 
 	/* calculate area using 2D cross product (shortcut of Newell's Method) */
 	n = 0;
 	l_iter = l_first = BM_FACE_FIRST_LOOP(f);
 	do {
-		luv1 = BM_ELEM_CD_GET_VOID_P(l_iter, cd_loop_uv_offset);
-		luv2 = BM_ELEM_CD_GET_VOID_P(l_iter->next, cd_loop_uv_offset);
+		luv1 = (const MLoopUV *)BM_ELEM_CD_GET_VOID_P(l_iter, cd_loop_uv_offset);
+		luv2 = (const MLoopUV *)BM_ELEM_CD_GET_VOID_P(l_iter->next, cd_loop_uv_offset);
 		n += cross_v2v2(luv1->uv, luv2->uv);
 	} while ((l_iter = l_iter->next) != l_first);
 
@@ -4303,14 +4303,14 @@ static int uv_select_similar_cmp_fl(const float delta, const float thresh, const
 }
 
 /* selects new UV verts based on the existing selection */
-static int uv_similar_vert_select_exec(bContext *C, wmOperator *op)
+static int uv_similar_vert_select_exec(bContext *UNUSED(C), wmOperator *UNUSED(op))
 {
 	// stub
 	return OPERATOR_FINISHED;
 }
 
 /* selects new UV edges based on the existing selection */
-static int uv_similar_edge_select_exec(bContext *C, wmOperator *op)
+static int uv_similar_edge_select_exec(bContext *UNUSED(C), wmOperator *UNUSED(op))
 {
 	// stub
 	return OPERATOR_FINISHED;
@@ -4339,7 +4339,6 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 	int i, j;
 	int sel;		/* current selected index */
 	float delta_fl;	/* initial_elem - other_elem */
-	int   delta_i;
 
 	/* get the type from RNA */
 	const int type = RNA_enum_get(op->ptr, "type");
