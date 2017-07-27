@@ -656,7 +656,7 @@ float uv_poly_calc_area(const BMFace *f, const int cd_loop_uv_offset)
 		n += cross_v2v2(luv1->uv, luv2->uv);
 	} while ((l_iter = l_iter->next) != l_first);
 
-	return n * 0.5f;
+	return fabs(n * 0.5f);
 }
 
 bool ED_uvedit_minmax(Scene *scene, Image *ima, Object *obedit, float r_min[2], float r_max[2])
@@ -4339,6 +4339,7 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 	int i, j;
 	int sel;		/* current selected index */
 	float delta_fl;	/* initial_elem - other_elem */
+	bool cont;		/* inner loop short circuit */
 
 	/* get the type from RNA */
 	const int type = RNA_enum_get(op->ptr, "type");
@@ -4386,12 +4387,15 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 	}
 
 	/* now go through and select any similar UV faces */
+	/* outer loop goes over all visible UV faces */
 	for (i = 0; i < visible_uvface_count; i++) {
 		if (uv_face_extra[i].selected)
 			continue;
 
-		f_mark = uv_face_extra[i].f;
-		for (j = 0; j < selected_uvface_count; j++) {
+		/* for each visible (and unselected) UV face, run through all the currently selected UV faces and check if we have a match */
+		f_mark = uv_face_extra[i].f; /* current unselected UV face */
+		cont = true;
+		for (j = 0; cont && (j < selected_uvface_count); j++) {
 			sel = selected_indices[j];
 			f_selected = uv_face_extra[sel].f; /* will be used in future expansions */
 			switch (type) {
@@ -4399,7 +4403,8 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 					delta_fl = uv_face_extra[i].area - uv_face_extra[sel].area;
 					if (uv_select_similar_cmp_fl(delta_fl, threshold, compare)) {
 						uvedit_face_select_enable(scene, em, f_mark, true, cd_loop_uv_offset);
-						goto continue_outer_loop; /* https://stackoverflow.com/a/9695942/3638059 */
+						/* found a match, no need to check the rest of the selection */
+						cont = false;
 					}
 					break;
 
@@ -4408,7 +4413,6 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 					break;
 			}
 		}
-		continue_outer_loop: ;
 	}
 
 	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
