@@ -116,6 +116,13 @@ add_test(
 # ------------------------------------------------------------------------------
 # MODELING TESTS
 add_test(
+	NAME uv_select_similar
+	COMMAND "$<TARGET_FILE:blender>" ${TEST_BLENDER_EXE_PARAMS}
+	--python ${CMAKE_CURRENT_LIST_DIR}/bl_mesh_uv_select_similar_test.py
+	--
+)
+
+add_test(
 	NAME bevel
 	COMMAND "$<TARGET_FILE:blender>" ${TEST_BLENDER_EXE_PARAMS}
 	${TEST_SRC_DIR}/modeling/bevel_regression.blend
