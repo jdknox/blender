@@ -4382,8 +4382,10 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 	                             "selected_indices uvedit_ops.c");
 	j = 0;
 	for (i = 0; i < visible_uvface_count; i++) {
-		if (uv_face_extra[i].selected)
+		if (uv_face_extra[i].selected) {
 			selected_indices[j] = i;
+			j++;
+		}
 	}
 
 	/* now go through and select any similar UV faces */
