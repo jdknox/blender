@@ -56,9 +56,9 @@ def create_test_bmesh():
     uvmap = bm.loops.layers.uv.new()
 
     # calculate simple one-place decimals
-    end_point = max(1 - NUM_FACES / 10, 0.1)
+    end_point = max(1 - NUM_FACES / 10, 0.1)    # don't scale below 10%
     scale_row = np.linspace(1, end_point, NUM_FACES, endpoint=False)
-    scales = np.repeat(scale_row, NUM_FACES)
+    scales = np.repeat(scale_row, NUM_FACES)    # same scale for uv faces in each row
     
     # scale uv faces to match mesh faces for easy visual inspection
     i = 0
@@ -76,19 +76,21 @@ def create_test_bmesh():
 
 
 class TestHelper:
-    def setUp(self):
-        self.mesh = create_test_mesh()
-        self.bmesh = create_test_bmesh()
-        self.bmesh.to_mesh(self.mesh)
+    @classmethod
+    def setUpClass(cls):
+        cls.mesh = create_test_mesh()
+        cls.bmesh = create_test_bmesh()
+        cls.bmesh.to_mesh(cls.mesh)
         bpy.ops.object.editmode_toggle()
 
-        self.bmesh = bmesh.from_edit_mesh(self.mesh)
-        self.bmesh.faces.ensure_lookup_table()
-        self.uv_layer = self.bmesh.loops.layers.uv.active
+        cls.bmesh = bmesh.from_edit_mesh(cls.mesh)
+        cls.bmesh.faces.ensure_lookup_table()
+        cls.uv_layer = cls.bmesh.loops.layers.uv.active
 
-    def tearDown(self):
-        if self.bmesh.is_valid:
-            self.bmesh.free()
+    @classmethod
+    def tearDownClass(cls):
+        if cls.bmesh.is_valid:
+            cls.bmesh.free()
 
     def select_all_mesh_faces(self):
         bpy.ops.mesh.select_all(action='SELECT')
@@ -97,19 +99,8 @@ class TestHelper:
         for loop in self.bmesh.faces[index].loops:
             loop[self.uv_layer].select = True
         bmesh.update_edit_mesh(self.mesh)
-
-
-class SelectSimilarUVFaceTest(TestHelper, unittest.TestCase):
-    def setUp(self):
-        bpy.context.scene.tool_settings.uv_select_mode = 'FACE'
-        TestHelper.setUp(self)
-        
-    def test_select_similar_uv_area(self):
-        self.select_all_mesh_faces()
-        self.select_uv_face(0)
-        res = bpy.ops.uv.select_similar(type='AREA', threshold=0.099)
-        self.assertEqual({'FINISHED'}, res)
-
+    
+    def get_selected_uv_faces(self):
         selected_uv_faces = []
         for face in self.bmesh.faces:
             selected = True
@@ -117,7 +108,30 @@ class SelectSimilarUVFaceTest(TestHelper, unittest.TestCase):
                 selected &= loop[self.uv_layer].select
             if selected:
                 selected_uv_faces.append(face.index)
+        return selected_uv_faces
+
+
+class SelectSimilarUVFaceTest(TestHelper, unittest.TestCase):
+    def setUp(self):
+        bpy.context.scene.tool_settings.uv_select_mode = 'FACE'
+        self.optype = 'AREA'
+    
+    def choose_index_given_all_uvs_visible(self, index, compare='EQUAL', threshold=0.099):
+        self.select_all_mesh_faces()
+        self.select_uv_face(index)
+        return bpy.ops.uv.select_similar(type=self.optype, compare=compare, threshold=threshold)
+
+    def test_single_equal(self):
+        res = self.choose_index_given_all_uvs_visible(0)
+        self.assertEqual({'FINISHED'}, res)
+        selected_uv_faces = self.get_selected_uv_faces()
         self.assertListEqual(selected_uv_faces, list(range(NUM_FACES)))
+
+    def test_single_less(self):
+        res = self.choose_index_given_all_uvs_visible(0, compare='LESS')
+        self.assertEqual({'FINISHED'}, res)
+        selected_uv_faces = self.get_selected_uv_faces()
+        self.assertListEqual(selected_uv_faces, list(range(NUM_FACES * NUM_FACES)))
 
 
 def main():
