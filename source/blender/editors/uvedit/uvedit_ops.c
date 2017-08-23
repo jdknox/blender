@@ -4331,7 +4331,7 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 	BMIter iter;
 	MTexPoly *tf;
 
-	SimSel_UVFaceExt *uv_face_extra = NULL;
+	SimSel_FaceExt *uv_face_extra = NULL;
 	int *selected_indices = NULL;
 	int selected_uvface_count = 0;
 	int visible_uvface_count = 0;

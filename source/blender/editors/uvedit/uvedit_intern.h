@@ -50,22 +50,6 @@ void  uv_poly_copy_aspect(float uv_orig[][2], float uv[][2], float aspx, float a
 void  uv_poly_center(struct BMFace *f, float r_cent[2], const int cd_loop_uv_offset);
 float uv_poly_calc_area(const BMFace *f, const int cd_loop_uv_offset);
 
-/*
- * extra face data (computed data)
- * (copied form bmo_similar.c; need to find a cleaner solution)
- */
-typedef struct SimSel_UVFaceExt {
-	BMFace  *f;             /* the face */
-	float    c[3];          /* center */
-	bool	 selected;		/* initially selected */
-	union {
-		float   area;       /* area */
-		float   perim;      /* perimeter */
-		float   d;          /* 4th component of plane (the first three being the normal) */
-		struct Image *t;    /* image pointer */
-	};
-} SimSel_UVFaceExt;
-
 /* find nearest */
 
 typedef struct NearestHit {

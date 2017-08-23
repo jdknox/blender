@@ -43,20 +43,6 @@
 
 /* in fact these could all be the same */
 
-/*
- * extra face data (computed data)
- */
-typedef struct SimSel_FaceExt {
-	BMFace  *f;             /* the face */
-	float    c[3];          /* center */
-	union {
-		float   area;       /* area */
-		float   perim;      /* perimeter */
-		float   d;          /* 4th component of plane (the first three being the normal) */
-		struct Image *t;    /* image pointer */
-	};
-} SimSel_FaceExt;
-
 static int bm_sel_similar_cmp_fl(const float delta, const float thresh, const int compare)
 {
 	switch (compare) {

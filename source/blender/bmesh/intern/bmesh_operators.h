@@ -29,6 +29,21 @@
 
 /*see comments in intern/bmesh_opdefines.c for documentation of specific operators*/
 
+/*--------extra data structs for select similar tool-------*/
+
+/* extra face data (computed data) */
+typedef struct SimSel_FaceExt {
+	BMFace  *f;             /* the face */
+	float    c[3];          /* center */
+	bool	 selected;		/* initially selected */
+	union {
+		float   area;       /* area */
+		float   perim;      /* perimeter */
+		float   d;          /* 4th component of plane (the first three being the normal) */
+		struct Image *t;    /* image pointer */
+	};
+} SimSel_FaceExt;
+
 /*--------defines/enumerations for specific operators-------*/
 
 /*quad innervert values*/
