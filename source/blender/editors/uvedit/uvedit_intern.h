@@ -49,6 +49,7 @@ bool uvedit_face_visible_nolocal(struct Scene *scene, struct BMFace *efa);
 void  uv_poly_copy_aspect(float uv_orig[][2], float uv[][2], float aspx, float aspy, int len);
 void  uv_poly_center(struct BMFace *f, float r_cent[2], const int cd_loop_uv_offset);
 float uv_poly_calc_area(const BMFace *f, const int cd_loop_uv_offset);
+float uv_poly_calc_perimeter(const BMFace *f, const int cd_loop_uv_offset);
 
 /* find nearest */
 

@@ -640,7 +640,7 @@ void uv_poly_copy_aspect(float uv_orig[][2], float uv[][2], float aspx, float as
 	}
 }
 
-/* get the area of the UV */
+/* get the area of the UV face */
 float uv_poly_calc_area(const BMFace *f, const int cd_loop_uv_offset)
 {
 	const BMLoop *l_iter, *l_first;
@@ -657,6 +657,24 @@ float uv_poly_calc_area(const BMFace *f, const int cd_loop_uv_offset)
 	} while ((l_iter = l_iter->next) != l_first);
 
 	return fabs(n * 0.5f);
+}
+
+/* get the perimeter of the UV face */
+float uv_poly_calc_perimeter(const BMFace *f, const int cd_loop_uv_offset)
+{
+	const BMLoop *l_iter, *l_first;
+	const MLoopUV *luv1, *luv2;
+	float n;
+
+	n = 0;
+	l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+	do {
+		luv1 = (const MLoopUV *)BM_ELEM_CD_GET_VOID_P(l_iter, cd_loop_uv_offset);
+		luv2 = (const MLoopUV *)BM_ELEM_CD_GET_VOID_P(l_iter->next, cd_loop_uv_offset);
+		n += len_v2v2(luv1->uv, luv2->uv);
+	} while ((l_iter = l_iter->next) != l_first);
+
+	return n;
 }
 
 bool ED_uvedit_minmax(Scene *scene, Image *ima, Object *obedit, float r_min[2], float r_max[2])
@@ -4279,7 +4297,7 @@ static EnumPropertyItem prop_similar_types[] = {
 //	{SIMFACE_IMAGE, "IMAGE", 0, "Image", ""},
 	{SIMFACE_AREA, "AREA", 0, "Area", "Select UV faces with similar area"},
 //	{SIMFACE_SIDES, "SIDES", 0, "Polygon Sides", ""},
-//	{SIMFACE_PERIMETER, "PERIMETER", 0, "Perimeter", ""},
+	{SIMFACE_PERIMETER, "PERIMETER", 0, "Perimeter", ""},
 //	{SIMFACE_NORMAL, "NORMAL", 0, "Normal", ""},
 //	{SIMFACE_SMOOTH, "SMOOTH", 0, "Flat/Smooth", ""},
 
@@ -4367,6 +4385,9 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 				case SIMFACE_AREA:
 					uv_face_extra[i].area = uv_poly_calc_area(efa, cd_loop_uv_offset);
 					break;
+				case SIMFACE_PERIMETER:
+					uv_face_extra[i].perim = uv_poly_calc_perimeter(efa, cd_loop_uv_offset);
+					break;
 			}
 		}
 		if (uvedit_face_select_test(scene, efa, cd_loop_uv_offset)) {
@@ -4403,16 +4424,18 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 			switch (type) {
 				case SIMFACE_AREA:
 					delta_fl = uv_face_extra[i].area - uv_face_extra[sel].area;
-					if (uv_select_similar_cmp_fl(delta_fl, threshold, compare)) {
-						uvedit_face_select_enable(scene, em, f_mark, true, cd_loop_uv_offset);
-						/* found a match, no need to check the rest of the selection */
-						cont = false;
-					}
 					break;
-
+				case SIMFACE_PERIMETER:
+					delta_fl = uv_face_extra[i].perim - uv_face_extra[sel].perim;
+					break;
 				default:
 					BLI_assert(0);
 					break;
+			}
+			if (uv_select_similar_cmp_fl(delta_fl, threshold, compare)) {
+				uvedit_face_select_enable(scene, em, f_mark, true, cd_loop_uv_offset);
+				/* found a match, no need to check the rest of the selection */
+				cont = false;
 			}
 		}
 	}
