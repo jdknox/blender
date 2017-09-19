@@ -4293,13 +4293,14 @@ static EnumPropertyItem prop_similar_types[] = {
 //	{SIMEDGE_FACE, "FACE", 0, "Amount of Faces Around an Edge", ""},
 //	{SIMEDGE_FACE_ANGLE, "FACE_ANGLE", 0, "Face Angles", ""},
 
-//	{SIMFACE_MATERIAL, "MATERIAL", 0, "Material", ""},
-//	{SIMFACE_IMAGE, "IMAGE", 0, "Image", ""},
+	{SIMFACE_MATERIAL, "MATERIAL", 0, "Material", "Select UV faces that have the same polygon material"},
+	{SIMFACE_IMAGE, "IMAGE", 0, "Image", "Select UV faces that have the same polygon UV texture image"},
 	{SIMFACE_AREA, "AREA", 0, "Area", "Select UV faces with similar area"},
-//	{SIMFACE_SIDES, "SIDES", 0, "Polygon Sides", ""},
-	{SIMFACE_PERIMETER, "PERIMETER", 0, "Perimeter", ""},
-//	{SIMFACE_NORMAL, "NORMAL", 0, "Normal", ""},
-//	{SIMFACE_SMOOTH, "SMOOTH", 0, "Flat/Smooth", ""},
+	{SIMFACE_SIDES, "SIDES", 0, "UV Sides", "Select UV faces with same number of sides"},
+	{SIMFACE_PERIMETER, "PERIMETER", 0, "Perimeter", "Select UV faces with similar edge perimeter"},
+	{SIMFACE_NORMAL, "NORMAL", 0, "Normal", "Select UV faces whose polygons have the same normal"},
+	{SIMFACE_COPLANAR, "COPLANAR", 0, "Co-planar", "Select UV faces associated with co-planar polygons"},
+	{SIMFACE_SMOOTH, "SMOOTH", 0, "Flat/Smooth", "Select UV faces based on polygon smoothness"},
 
 	{0, NULL, 0, NULL, NULL}
 };
@@ -4314,6 +4315,21 @@ static int uv_select_similar_cmp_fl(const float delta, const float thresh, const
 			return ((delta + thresh) >= 0.0f);
 		case SIM_CMP_LT:
 			return ((delta - thresh) <= 0.0f);
+		default:
+			BLI_assert(0);
+			return 0;
+	}
+}
+
+static int uv_select_similar_cmp_i(const int delta, const int compare)
+{
+	switch (compare) {
+		case SIM_CMP_EQ:
+			return (delta == 0);
+		case SIM_CMP_GT:
+			return (delta > 0);
+		case SIM_CMP_LT:
+			return (delta < 0);
 		default:
 			BLI_assert(0);
 			return 0;
@@ -4355,13 +4371,17 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 	int visible_uvface_count = 0;
 
 	int i, j;
-	int sel;		/* current selected index */
-	float delta_fl;	/* initial_elem - other_elem */
-	bool cont;		/* inner loop short circuit */
+	int sel;						/* current selected index */
+	float delta_fl;					/* initial_elem - other_elem */
+	int delta_i;
+	float angle = 0.0f;
+	bool comp_fl, comp_i;			/* compare by float or int? */
+	bool cont;						/* inner loop short circuit */
 
 	/* get the type from RNA */
 	const int type = RNA_enum_get(op->ptr, "type");
 	const float threshold = RNA_float_get(op->ptr, "threshold");
+	const float threshold_radians = threshold * (float)M_PI;
 	const int compare = RNA_enum_get(op->ptr, "compare");
 
 	const int cd_loop_uv_offset = CustomData_get_offset(&bm->ldata, CD_MLOOPUV);
@@ -4385,8 +4405,25 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 				case SIMFACE_AREA:
 					uv_face_extra[i].area = uv_poly_calc_area(efa, cd_loop_uv_offset);
 					break;
+
 				case SIMFACE_PERIMETER:
 					uv_face_extra[i].perim = uv_poly_calc_perimeter(efa, cd_loop_uv_offset);
+					break;
+
+				case SIMFACE_IMAGE:
+					uv_face_extra[i].t = NULL;
+					if (CustomData_has_layer(&(bm->pdata), CD_MTEXPOLY)) {
+						MTexPoly *mtpoly = CustomData_bmesh_get(&bm->pdata, uv_face_extra[i].f->head.data, CD_MTEXPOLY);
+						uv_face_extra[i].t = mtpoly->tpage;
+					}
+					break;
+
+				case SIMFACE_COPLANAR:
+					/* compute the center of the polygon */
+					BM_face_calc_center_mean(uv_face_extra[i].f, uv_face_extra[i].c);
+
+					/* compute the plane distance */
+					uv_face_extra[i].d = dot_v3v3(uv_face_extra[i].f->no, uv_face_extra[i].c);
 					break;
 			}
 		}
@@ -4409,30 +4446,105 @@ static int uv_similar_face_select_exec(bContext *C, wmOperator *op)
 		}
 	}
 
+	/* decide which comparison method to use */
+	comp_fl = comp_i = false;
+	switch (type) {
+		case SIMFACE_AREA:
+		case SIMFACE_PERIMETER:
+		case SIMFACE_COPLANAR:
+			comp_fl = true;
+			break;
+
+		case SIMFACE_SIDES:
+			comp_i = true;
+			break;
+
+		case SIMFACE_IMAGE:
+		case SIMFACE_MATERIAL:
+		case SIMFACE_SMOOTH:
+		case SIMFACE_NORMAL:
+			break;
+		default:
+			BLI_assert(0);
+			break;
+	}
+
 	/* now go through and select any similar UV faces */
 	/* outer loop goes over all visible UV faces */
 	for (i = 0; i < visible_uvface_count; i++) {
 		if (uv_face_extra[i].selected)
 			continue;
 
-		/* for each visible (and unselected) UV face, run through all the currently selected UV faces and check if we have a match */
 		f_mark = uv_face_extra[i].f; /* current unselected UV face */
 		cont = true;
+		/* for each visible (and unselected) UV face, run through all the currently selected UV faces and check if we have a match */
 		for (j = 0; cont && (j < selected_uvface_count); j++) {
 			sel = selected_indices[j];
-			f_selected = uv_face_extra[sel].f; /* will be used in future expansions */
+			f_selected = uv_face_extra[sel].f;
 			switch (type) {
+				case SIMFACE_MATERIAL:
+					if (f_mark->mat_nr == f_selected->mat_nr) {
+						cont = false;
+					}
+					break;
+
+				case SIMFACE_IMAGE:
+					if (uv_face_extra[i].t == uv_face_extra[sel].t) {
+						cont = false;
+					}
+					break;
+
+				case SIMFACE_NORMAL:
+					angle = angle_normalized_v3v3(f_selected->no, f_mark->no);	/* if the angle between the normals -> 0 */
+					if (angle <= threshold_radians) {
+						cont = false;
+					}
+					break;
+
+				case SIMFACE_COPLANAR:
+				{
+					float sign = 1.0f;
+					angle = angle_normalized_v3v3(f_selected->no, f_mark->no); /* angle -> 0 */
+					/* allow for normal pointing in either direction (just check the plane) */
+					if (angle > (float)M_PI * 0.5f) {
+						angle = (float)M_PI - angle;
+						sign = -1.0f;
+					}
+					if (angle <= threshold_radians) { /* and dot product difference -> 0 */
+						delta_fl = uv_face_extra[i].d - (uv_face_extra[sel].d * sign);
+						comp_fl = true;
+					}
+					else {
+						comp_fl = false;
+					}
+					break;
+				}
 				case SIMFACE_AREA:
 					delta_fl = uv_face_extra[i].area - uv_face_extra[sel].area;
 					break;
+
+				case SIMFACE_SIDES:
+					delta_i = f_mark->len - f_selected->len;
+					break;
+
 				case SIMFACE_PERIMETER:
 					delta_fl = uv_face_extra[i].perim - uv_face_extra[sel].perim;
 					break;
+
+				case SIMFACE_SMOOTH:
+					if (BM_elem_flag_test(f_mark, BM_ELEM_SMOOTH) == BM_elem_flag_test(f_selected, BM_ELEM_SMOOTH)) {
+						cont = false;
+					}
+					break;
+
 				default:
 					BLI_assert(0);
 					break;
 			}
-			if (uv_select_similar_cmp_fl(delta_fl, threshold, compare)) {
+			if ((comp_fl && uv_select_similar_cmp_fl(delta_fl, threshold, compare)) ||
+			    (comp_i  && uv_select_similar_cmp_i(delta_i, compare)) ||
+			    !cont)
+			{
 				uvedit_face_select_enable(scene, em, f_mark, true, cd_loop_uv_offset);
 				/* found a match, no need to check the rest of the selection */
 				cont = false;
