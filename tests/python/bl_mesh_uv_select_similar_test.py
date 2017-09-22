@@ -22,7 +22,6 @@
 ./blender.bin --background -noaudio --factory-startup --python tests/python/bl_mesh_uv_select_similar_test.py -- --verbose
 """
 
-import pathlib
 import sys
 import unittest
 import math
@@ -33,16 +32,16 @@ import bmesh
 import mathutils as mu
 
 
-COLUMNS = 8                  # create a square grid with COLUMNS x COLUMNS faces
-ROWS = COLUMNS               # for eaiser visualization of code
-TOTAL_FACES = COLUMNS * COLUMNS # width of grid
-INRADIUS = COLUMNS / 2       # inradius of grid
+COLUMNS = 8                         # create a square grid with COLUMNS x COLUMNS faces
+ROWS = COLUMNS                      # for eaiser visualization of code
+TOTAL_FACES = COLUMNS * COLUMNS     # width of grid
+INRADIUS = COLUMNS / 2              # inradius of grid
 
 args = None
 
 
 def create_test_mesh(name):
-   # create active mesh
+    # create active mesh
     bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.add(type="MESH")
     bpy.ops.mesh.uv_texture_add()
@@ -59,7 +58,7 @@ def create_area_bmesh():
     bmesh.ops.create_grid(bm, x_segments=COLUMNS + 1, y_segments=COLUMNS + 1, size=INRADIUS, calc_uvs=True)
     bmesh.ops.translate(bm, vec=(INRADIUS, INRADIUS, 0), verts=bm.verts)
     bmesh.ops.split_edges(bm, edges=bm.edges)
-    uvmap = bm.loops.layers.uv.new()
+    bm.loops.layers.uv.new()
 
     # calculate simple one-place decimals
     end_point = max(1 - COLUMNS / 10, 0.1)    # don't scale below 10%
@@ -87,8 +86,8 @@ def create_sides_bmesh():
             n = y + 3   # start with triangle...
             d = bmesh.ops.create_circle(bm, cap_ends=True, segments=n, diameter=0.5)
             bmesh.ops.translate(bm, vec=(s * x, s * y, 0), verts=d['verts'])
-    
-    uvmap = bm.loops.layers.uv.new()
+
+    bm.loops.layers.uv.new()
     return bm
 
 
@@ -106,8 +105,8 @@ def create_coplanar_bmesh():
                 if x == 1 and z == 1:
                     bmesh.ops.rotate(bm, cent=(0, 0, 0), matrix=rotationMatrix, verts=d['verts'])
                 bmesh.ops.translate(bm, vec=(s * x, s * y, s * z), verts=d['verts'])
-    
-    uvmap = bm.loops.layers.uv.new()
+
+    bm.loops.layers.uv.new()
     return bm
 
 
@@ -148,7 +147,7 @@ class TestHelper:
         # rough check for non-sequence
         if not hasattr(indices, '__len__'):
             indices = [indices]
-            
+
         for index in indices:
             for loop in self.bmesh.faces[index].loops:
                 loop[self.uv_layer].select = True
@@ -191,13 +190,13 @@ class SelectSimilarUVFaceNormalTest(TestHelper, unittest.TestCase):
 
     def test_normal_single(self):
         faces = np.array([0, 6, 12, 18, 24, 36])
-        should_be = set(faces)              # -X facing
+        should_be = set(faces)                  # -X facing
         self.check_by_index(0, should_be)
-        should_be = set(faces + 5)          # +Z facing
+        should_be = set(faces + 5)              # +Z facing
         self.check_by_index(5, should_be)
-        should_be = set(range(3, 8 * 6, 6)) # -Y facing
+        should_be = set(range(3, 8 * 6, 6))     # -Y facing
         self.check_by_index(3, should_be)
-        should_be = set([32, 44])           # top right cubes, normal: <0.7, 0, 0.7>
+        should_be = set([32, 44])               # top right cubes, normal: <0.7, 0, 0.7>
         self.check_by_index(32, should_be)
 
     def test_normal_multiple(self):
@@ -209,7 +208,6 @@ class SelectSimilarUVFaceNormalTest(TestHelper, unittest.TestCase):
         should_be = should_be.difference(exclude)   # should skip the ones without (coordinate) unit vecgor normals
         should_be = should_be.difference(exclude + 12)
         self.check_by_index(range(0, 6), should_be)
-        
 
 
 class SelectSimilarUVFaceCoplanarTest(TestHelper, unittest.TestCase):
@@ -256,7 +254,7 @@ class SelectSimilarUVFaceSmoothTest(TestHelper, unittest.TestCase):
 
     def test_smooth_multiple(self):
         should_be = set(range(TOTAL_FACES))
-        self.check_by_index([0,1], should_be)
+        self.check_by_index([0, 1], should_be)
         self.check_by_index(range(TOTAL_FACES), should_be)
 
 
@@ -284,7 +282,7 @@ class SelectSimilarUVFaceMaterialTest(TestHelper, unittest.TestCase):
 
     def test_material_multiple(self):
         should_be = set(range(TOTAL_FACES))
-        self.check_by_index([0,1], should_be)
+        self.check_by_index([0, 1], should_be)
         self.check_by_index(range(TOTAL_FACES), should_be)
 
 
@@ -346,8 +344,6 @@ class SelectSimilarUVFacePerimeterTest(TestHelper, unittest.TestCase):
         # scale the last face in each row so that the next row up has the same perimeter
         faces = list(cls.bmesh.faces)[COLUMNS - 1::COLUMNS]
         for face in faces:
-            face_translate = face.calc_center_median()
-            face_matrix = mu.Matrix.Translation(face_translate)
             verts = list(face.verts)[1:3]
             bmesh.ops.translate(cls.bmesh, vec=[-0.1, 0, 0], verts=verts)
         # last face in top row can match the first row
