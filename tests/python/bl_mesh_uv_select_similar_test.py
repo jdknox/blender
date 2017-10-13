@@ -84,7 +84,7 @@ def create_sides_bmesh():
     for y in range(COLUMNS):
         for x in range(COLUMNS):
             n = y + 3   # start with triangle...
-            d = bmesh.ops.create_circle(bm, cap_ends=True, segments=n, diameter=0.5)
+            d = bmesh.ops.create_circle(bm, cap_ends=True, segments=n, radius=0.5)
             bmesh.ops.translate(bm, vec=(s * x, s * y, 0), verts=d['verts'])
 
     bm.loops.layers.uv.new()
